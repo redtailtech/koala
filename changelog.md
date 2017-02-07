@@ -1,3 +1,162 @@
+v2.5.0
+======
+
+New features:
+
+* API#get_object_metadata provides a convenient accessor to an object's graph metadata (thanks, sancopanco!)
+
+Documentation improvements:
+
+* Add explicit require to examples in readme.md (thanks, dwkns!)
+
+Internal improvements:
+
+* Remove MultiJson dependency (thanks, sakuro!)
+
+v2.4.0
+======
+
+**Note:** Koala is no longer officially supported on Ruby 1.9.3 (which was [end-of-lifed back in
+2015](https://www.ruby-lang.org/en/news/2014/01/10/ruby-1-9-3-will-end-on-2015/)). Versions may
+still work (until version 3.0, when we may start using keyword arguments), but will not be tested
+on 1.9.3.
+
+Updated features:
+
+* Batch API requests will now properly calculate appsecret_proofs for multiple access tokens
+  (thanks, mwpastore!)
+
+Internal improvements:
+
+* Koala now explicitly depends on MultiJson >= 1.3.0, since it uses methods introduced in that
+  version
+
+Testing improvements:
+
+* Test Koala against Ruby 2.3.0 (thanks, thedrow!)
+
+
+v2.3.0
+======
+
+Updated features:
+
+* API#get_user_picture_data is now API#get_picture_data. The old method and API#get_picture both
+  remain with deprecation warnings. (Thanks noahsilas for earlier work on this!)
+* Koala::Facebook::APIError now includes [debug and trace
+  info](https://github.com/arsduo/koala/blob/master/lib/koala/errors.rb) provided by Facebook in the headers
+  (thanks, @elhu!)
+
+Internal Improvements:
+
+* Graph API error handling is now done via the GraphErrorChecker class
+
+Testing improvements:
+
+* Upgraded RSpec to 3.3.0
+* Removed pended specs that were no longer relevant
+* Improved https regex in test suite (thanks, lucaskds!)
+
+v2.2.0
+======
+
+Updated features:
+
+* Restore API#search, since Facebook still supports that for certain usecases (thanks, vhoof!)
+* You can now specify format: :json in http_options to make Content-Type application/json requests (thanks, adparlor!)
+* Koala now supports uploading videos by URL (thanks, filipegiusti!)
+* GraphCollections now offer direct access to the collection summary data via #summary (thanks, vhoof!)
+
+Internal Improvements:
+
+* Use MultiJson::LoadError instead of the newer ParseError for backward compatibility (thanks, bunshin!)
+
+Documentation improvements:
+
+* modernize the hash syntax in the readme (thanks, st0012!)
+
+v2.1.0
+======
+
+Documentation improvements:
+
+* extend/clean up code quality badges (thanks, jbender!)
+
+v2.0.0
+======
+
+Koala 2.0 is not a major refactor, but rather a set of small, mostly internal
+refactors:
+
+* BatchAPI now reads both access token and app secret from the original API
+  instance (thanks, lukeasrodgers!)
+* Remove legacy interfaces (deprecated since 1.2)
+  * API#search (which Facebook doesn't support anymore)
+  * TestUser#graph\_api and RealtimeUpdates#graph\_api (use #api instead)
+  * Various HTTP options (see diff for deprecation warnings/upgrade
+    instructions for each method)
+  * NetHTTPService and TyphoeusHTTPService (see diff for deprecation
+    warnings/upgrade instructions)
+  * OAuth methods for dealing with session tokens (which Facebook stopped
+    providing)
+  * OAuth#get\_user\_from\_cookies (use get\_user\_info\_from\_cookies instead)
+* Blocks passed to API#get_picture will work in the batch API (thanks, cwhetung!)
+* Added API#get_user_picture_data to get data about a picture (thanks, morgoth!)
+
+Other changes:
+
+* Test against modern Ruby versions on Travis (thanks, nicolasleger!)
+* Speed up Travis builds (thanks, morgoth!)
+
+v.1.11.1
+========
+
+Bug fixes:
+* Properly import Facebook error attributes (thanks, isra17!)
+
+v.1.11.0
+========
+
+Updated features:
+* OAuth now supports decoding the new JSON responses from the access token endpoints (thanks, ridiculous!)
+* Batch API now accepts either symbols or strings for the access token (thanks, mattmueller!)
+* Incorporate user message and title into error handling (thanks, richrines and isra17!)
+
+Bug fixes:
+* Fixed bug in GraphCollection URL versioning (thanks, deviousdodo and jankowy!)
+* TestUsers#create\_network now properly handles options (thanks, crx!)
+
+Documentation improvements:
+* Updated gem version (thanks, thomasklemm!)
+
+
+v.1.10.1
+========
+
+Bug fixes:
+
+* Facebook API version now works in all cases (thanks, markprzepiora!)
+* Fixed a typo in an example (thanks, mktakuya!)
+
+v.1.10.0
+========
+
+New features:
+* API versioning is now supported through global and per-options requests
+  (Koala.config.api_version and the :api_version key specified as a per-request
+  options)
+
+Updated features:
+* API calls won't modify argument hashes in place anymore (thanks, MSex!)
+* OAuth#dialog_url now uses https rather than http
+
+Testing improvements:
+* Use the modern RSpec syntax (thanks, loganhasson!)
+
+Documentation improvements:
+* Properly document the timeout option (thanks, bachand!)
+* The gemspec now includes the license (thanks, coreyhaines!)
+
 v1.9.0
 ======
 

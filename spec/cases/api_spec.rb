@@ -30,6 +30,21 @@ describe "Koala::Facebook::API" do
     service.api('anything')
   end
 
+  it "doesn't add token to received arguments" do
+    token = 'adfadf'
+    service = Koala::Facebook::API.new token
+
+    expect(Koala).to receive(:make_request).with(
+                       anything,
+                       hash_including('access_token' => token),
+                       anything,
+                       anything
+                     ).and_return(Koala::HTTPService::Response.new(200, "", ""))
+
+    args = {}.freeze
+    service.api('anything', args)
+  end
+
   it "has an attr_reader for access token" do
     token = 'adfadf'
     service = Koala::Facebook::API.new token
@@ -60,9 +75,29 @@ describe "Koala::Facebook::API" do
     expect(@service.api('anything', {}, 'get', :http_component => http_component)).to eq(response)
   end
 
-  it "turns arrays of non-enumerables into comma-separated arguments" do
+  it "turns arrays of non-enumerables into comma-separated arguments by default" do
     args = [12345, {:foo => [1, 2, "3", :four]}]
     expected = ["/12345", {:foo => "1,2,3,four"}, "get", {}]
+    response = double('Mock KoalaResponse', :body => '', :status => 200)
+    expect(Koala).to receive(:make_request).with(*expected).and_return(response)
+    @service.api(*args)
+  end
+
+  it "can be configured to leave arrays of non-enumerables as is" do
+    Koala.configure do |config|
+      config.preserve_form_arguments = true
+    end
+
+    args = [12345, {:foo => [1, 2, "3", :four]}]
+    expected = ["/12345", {:foo => [1, 2, "3", :four]}, "get", {}]
+    response = double('Mock KoalaResponse', :body => '', :status => 200)
+    expect(Koala).to receive(:make_request).with(*expected).and_return(response)
+    @service.api(*args)
+  end
+
+  it "can be configured on a per-request basis to leave arrays as is" do
+    args = [12345, {foo: [1, 2, "3", :four]}, "get", preserve_form_arguments: true]
+    expected = ["/12345", {foo: [1, 2, "3", :four]}, "get", preserve_form_arguments: true]
     response = double('Mock KoalaResponse', :body => '', :status => 200)
     expect(Koala).to receive(:make_request).with(*expected).and_return(response)
     @service.api(*args)
@@ -80,12 +115,20 @@ describe "Koala::Facebook::API" do
     @service.api(*args)
   end
 
+  it "doesn't modify any data if the option format of :json is provided" do
+    args = [12345, {:foo => [1, 2, "3", :four]}, 'get', format: :json]
+    expected = ["/12345", {:foo => [1, 2, "3", :four]}, 'get', format: :json]
+    response = double('Mock KoalaResponse', :body => '', :status => 200)
+    expect(Koala).to receive(:make_request).with(*expected).and_return(response)
+    @service.api(*args)
+  end
+
   it "returns the body of the request as JSON if no http_component is given" do
     response = double('response', :body => 'body', :status => 200)
     allow(Koala).to receive(:make_request).and_return(response)
 
     json_body = double('JSON body')
-    allow(MultiJson).to receive(:load).and_return([json_body])
+    allow(JSON).to receive(:load).and_return([json_body])
 
     expect(@service.api('anything')).to eq(json_body)
   end
@@ -117,17 +160,19 @@ describe "Koala::Facebook::API" do
     expect(@service.api('anything')).to be_falsey
   end
 
-  describe "with regard to leading slashes" do
-    it "adds a leading / to the path if not present" do
-      path = "anything"
-      expect(Koala).to receive(:make_request).with("/#{path}", anything, anything, anything).and_return(Koala::HTTPService::Response.new(200, 'true', {}))
-      @service.api(path)
-    end
+  describe "path manipulation" do
+    context "leading /" do
+      it "adds a leading / to the path if not present" do
+        path = "anything"
+        expect(Koala).to receive(:make_request).with("/#{path}", anything, anything, anything).and_return(Koala::HTTPService::Response.new(200, 'true', {}))
+        @service.api(path)
+      end
 
-    it "doesn't change the path if a leading / is present" do
-      path = "/anything"
-      expect(Koala).to receive(:make_request).with(path, anything, anything, anything).and_return(Koala::HTTPService::Response.new(200, 'true', {}))
-      @service.api(path)
+      it "doesn't change the path if a leading / is present" do
+        path = "/anything"
+        expect(Koala).to receive(:make_request).with(path, anything, anything, anything).and_return(Koala::HTTPService::Response.new(200, 'true', {}))
+        @service.api(path)
+      end
     end
   end
 
@@ -173,14 +218,14 @@ describe "Koala::Facebook::API" do
           let(:api) { Koala::Facebook::API.new(access_token, appsecret) }
 
           it "will be included by default" do
-            Koala.should_receive(:make_request).with(path, token_args.merge(appsecret_proof_args), verb, {}).and_return(response)
+            expect(Koala).to receive(:make_request).with(path, token_args.merge(appsecret_proof_args), verb, {}).and_return(response)
             api.api(path, {}, verb, :appsecret_proof => true)
           end
         end
 
         describe "but without an appsecret included on API initialization" do
           it "will not be included" do
-            Koala.should_receive(:make_request).with(path, token_args, verb, {}).and_return(response)
+            expect(Koala).to receive(:make_request).with(path, token_args, verb, {}).and_return(response)
             api.api(path, {}, verb, :appsecret_proof => true)
           end
         end
@@ -191,7 +236,7 @@ describe "Koala::Facebook::API" do
           let(:api) { Koala::Facebook::API.new(nil, appsecret) }
 
           it "will not be included" do
-            Koala.should_receive(:make_request).with(path, {}, verb, {}).and_return(response)
+            expect(Koala).to receive(:make_request).with(path, {}, verb, {}).and_return(response)
             api.api(path, {}, verb, :appsecret_proof => true)
           end
         end
@@ -200,7 +245,7 @@ describe "Koala::Facebook::API" do
           let(:api) { Koala::Facebook::API.new }
 
           it "will not be included" do
-            Koala.should_receive(:make_request).with(path, {}, verb, {}).and_return(response)
+            expect(Koala).to receive(:make_request).with(path, {}, verb, {}).and_return(response)
             api.api(path, {}, verb, :appsecret_proof => true)
           end
         end

@@ -25,7 +25,7 @@ shared_examples_for "Koala RestAPI" do
     end
 
     it "sets the read_only option to true if the method is listed in the read-only list" do
-      method = Koala::Facebook::RestAPI::READ_ONLY_METHODS.first
+      method = Koala::Facebook::API::READ_ONLY_METHODS.first
 
       expect(@api).to receive(:api).with(
         anything,
@@ -126,7 +126,7 @@ shared_examples_for "Koala RestAPI with an access token" do
   describe "#set_app_properties" do
     it "sends Facebook the properties JSON-encoded as :properties" do
       props = {:a => 2, :c => [1, 2, "d"]}
-      expect(@api).to receive(:rest_call).with(anything, hash_including(:properties => MultiJson.dump(props)), anything, anything)
+      expect(@api).to receive(:rest_call).with(anything, hash_including(:properties => JSON.dump(props)), anything, anything)
       @api.set_app_properties(props)
     end
 

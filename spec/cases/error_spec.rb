@@ -5,7 +5,7 @@ describe Koala::Facebook::APIError do
     expect(Koala::Facebook::APIError.new(nil, nil)).to be_a(Koala::KoalaError)
   end
 
-  [:fb_error_type, :fb_error_code, :fb_error_subcode, :fb_error_message, :http_status, :response_body].each do |accessor|
+  [:fb_error_type, :fb_error_code, :fb_error_subcode, :fb_error_message, :fb_error_user_msg, :fb_error_user_title, :fb_error_trace_id, :fb_error_rev, :fb_error_debug, :http_status, :response_body].each do |accessor|
     it "has an accessor for #{accessor}" do
       expect(Koala::Facebook::APIError.instance_methods.map(&:to_sym)).to include(accessor)
       expect(Koala::Facebook::APIError.instance_methods.map(&:to_sym)).to include(:"#{accessor}=")
@@ -22,12 +22,17 @@ describe Koala::Facebook::APIError do
   end
 
   context "with an error_info hash" do
-    let(:error) { 
+    let(:error) {
       error_info = {
         'type' => 'type',
         'message' => 'message',
         'code' => 1,
-        'error_subcode' => 'subcode'
+        'error_subcode' => 'subcode',
+        'error_user_msg' => 'error user message',
+        'error_user_title' => 'error user title',
+        'x-fb-trace-id' => 'fb trace id',
+        'x-fb-debug' => 'fb debug token',
+        'x-fb-rev' => 'fb revision'
       }
       Koala::Facebook::APIError.new(400, '', error_info)
     }
@@ -36,15 +41,20 @@ describe Koala::Facebook::APIError do
       :fb_error_type => 'type',
       :fb_error_message => 'message',
       :fb_error_code => 1,
-      :fb_error_subcode => 'subcode'
+      :fb_error_subcode => 'subcode',
+      :fb_error_user_msg => 'error user message',
+      :fb_error_user_title => 'error user title',
+      :fb_error_trace_id => 'fb trace id',
+      :fb_error_debug => 'fb debug token',
+      :fb_error_rev => 'fb revision'
     }.each_pair do |accessor, value|
       it "sets #{accessor} to #{value}" do
         expect(error.send(accessor)).to eq(value)
       end
     end
 
-    it "sets the error message \"type: error_info['type'], code: error_info['code'], error_subcode: error_info['error_subcode'], message: error_info['message'] [HTTP http_status]\"" do
-      expect(error.message).to eq("type: type, code: 1, error_subcode: subcode, message: message [HTTP 400]")
+    it "sets the error message appropriately" do
+      expect(error.message).to eq("type: type, code: 1, error_subcode: subcode, message: message, error_user_title: error user title, error_user_msg: error user message, x-fb-trace-id: fb trace id [HTTP 400]")
     end
   end
 
@@ -58,13 +68,15 @@ describe Koala::Facebook::APIError do
 
   context "with no error_info and a response_body containing error JSON" do
     it "should extract the error info from the response body" do
-      response_body = '{ "error": { "type": "type", "message": "message", "code": 1, "error_subcode": "subcode" } }'
+      response_body = '{ "error": { "type": "type", "message": "message", "code": 1, "error_subcode": "subcode", "error_user_msg": "error user message", "error_user_title": "error user title" } }'
       error = Koala::Facebook::APIError.new(400, response_body)
       {
         :fb_error_type => 'type',
         :fb_error_message => 'message',
         :fb_error_code => 1,
-        :fb_error_subcode => 'subcode'
+        :fb_error_subcode => 'subcode',
+        :fb_error_user_msg => 'error user message',
+        :fb_error_user_title => 'error user title'
       }.each_pair do |accessor, value|
         expect(error.send(accessor)).to eq(value)
       end

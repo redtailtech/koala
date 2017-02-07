@@ -76,12 +76,26 @@ describe Koala::HTTPService do
   describe "server" do
     describe "with no options" do
       it "returns the REST server if options[:rest_api]" do
-        expect(Koala::HTTPService.server(:rest_api => true)).to match(Regexp.new(Koala.config.rest_server))
+        expect(Koala::HTTPService.server(:rest_api => true)).to eq(
+         "http://#{Koala.config.rest_server}"
+        )
       end
 
       it "returns the graph server if !options[:rest_api]" do
-        expect(Koala::HTTPService.server(:rest_api => false)).to match(Regexp.new(Koala.config.graph_server))
-        expect(Koala::HTTPService.server({})).to match(Regexp.new(Koala.config.graph_server))
+        expect(Koala::HTTPService.server(:rest_api => false)).to eq(
+          "http://#{Koala.config.graph_server}"
+        )
+        expect(Koala::HTTPService.server({})).to eq(
+          "http://#{Koala.config.graph_server}"
+        )
+      end
+
+      context "with use_ssl" do
+        it "includes https" do
+          expect(Koala::HTTPService.server(use_ssl: true)).to eq(
+            "https://#{Koala.config.graph_server}"
+          )
+        end
       end
     end
 
@@ -127,7 +141,7 @@ describe Koala::HTTPService do
       val = 'json_value'
       not_a_string = 'not_a_string'
       allow(not_a_string).to receive(:is_a?).and_return(false)
-      expect(MultiJson).to receive(:dump).with(not_a_string).and_return(val)
+      expect(JSON).to receive(:dump).with(not_a_string).and_return(val)
 
       string = "hi"
 
@@ -238,6 +252,30 @@ describe Koala::HTTPService do
         Koala::HTTPService.make_request("anything", {"access_token" => "foo"}, "get", options)
       end
 
+      it "calls server with a json object when provided a format option for post requests" do
+        # Unstub the now somewhat regrettable stubbing above
+        allow(Faraday).to receive(:new).and_call_original
+
+        mock_request_klass = Class.new do
+          attr_accessor :path, :body, :headers, :status
+          def initialize
+            @headers = {}
+          end
+        end
+
+        mock_request = mock_request_klass.new
+        allow_any_instance_of(Faraday::Connection).to receive(:post).and_yield(mock_request)
+
+        path = "California"
+        args = {:a => 2, :c => "3"}
+
+        Koala::HTTPService.make_request(path, args, "post", format: :json)
+
+        expect(mock_request.path).to eq(path)
+        expect(mock_request.headers).to eq("Content-Type" => "application/json")
+        expect(mock_request.body).to eq(args.to_json)
+      end
+
       it "calls server with the composite options" do
         options = {:a => 2, :c => "3"}
         http_options = {:a => :a}
@@ -259,6 +297,34 @@ describe Koala::HTTPService do
         expect(Koala::HTTPService).to receive(:faraday_middleware).and_return(block)
         expect(Faraday).to receive(:new).with(anything, anything, &block).and_return(@mock_connection)
         Koala::HTTPService.make_request("anything", {}, "get")
+      end
+    end
+
+
+    context "with API versions" do
+      it "adds a version if specified by Koala.config" do
+        expect(Koala.config).to receive(:api_version).and_return("v11")
+        expect(@mock_connection).to receive(:get).with("/v11/anything", anything)
+        Koala::HTTPService.make_request("anything", {}, "get")
+      end
+
+      it "prefers a version set in http_options" do
+        allow(Koala.config).to receive(:api_version).and_return("v11")
+        allow(Koala::HTTPService).to receive(:http_options).and_return({ api_version: 'v12' })
+        expect(@mock_connection).to receive(:get).with("/v12/anything", anything)
+        Koala::HTTPService.make_request("anything", {}, "get")
+      end
+
+      it "doesn't add double slashes to the path" do
+        allow(Koala::HTTPService).to receive(:http_options).and_return({ api_version: 'v12' })
+        expect(@mock_connection).to receive(:get).with("/v12/anything", anything)
+        Koala::HTTPService.make_request("/anything", {}, "get")
+      end
+
+      it "doesn't add a version if the path already contains one" do
+        expect(Koala.config).to receive(:api_version).and_return("v11")
+        expect(@mock_connection).to receive(:get).with("/v12/anything", anything)
+        Koala::HTTPService.make_request("/v12/anything", {}, "get")
       end
     end
 
@@ -342,169 +408,21 @@ describe Koala::HTTPService do
     end
   end
 
-  describe "deprecated options" do
-    before :each do
-      allow(Koala::HTTPService).to receive(:http_options).and_return({})
-      @service = Koala.http_service
+  describe ".path_contains_api_version?" do
+    it "works when the path is prefixed by a slash" do
+      expect(Koala::HTTPService.path_contains_api_version?('/v2.1/anything')).to be true
     end
 
-    after :each do
-      Koala.http_service = @service
+    it "works when the path is not prefixed by a slash" do
+      expect(Koala::HTTPService.path_contains_api_version?('v2.1/anything')).to be true
     end
 
-    {
-      :timeout => :timeout,
-      :always_use_ssl => :use_ssl,
-      :proxy => :proxy
-    }.each_pair do |deprecated_method, parameter|
-      describe ".#{deprecated_method}" do
-        context "read" do
-          it "reads http_options[:#{parameter}]" do
-            value = "foo"
-            Koala::HTTPService.http_options[parameter] = value
-            expect(Koala::HTTPService.send(deprecated_method)).to eq(value)
-          end
-
-          it "generates a deprecation warning" do
-            expect(Koala::Utils).to receive(:deprecate)
-            Koala::HTTPService.send(deprecated_method)
-          end
-        end
-
-        context "write" do
-          it "writes to http_options[:#{parameter}]" do
-            Koala::HTTPService.http_options[parameter] = nil
-            value = "foo"
-            Koala::HTTPService.send(:"#{deprecated_method}=", value)
-            expect(Koala::HTTPService.http_options[parameter]).to eq(value)
-          end
-
-          it "generates a deprecation warning" do
-            expect(Koala::Utils).to receive(:deprecate)
-            Koala::HTTPService.send(:"#{deprecated_method}=", 2)
-          end
-        end
-      end
+    it "works with versions without a ." do
+      expect(Koala::HTTPService.path_contains_api_version?('v21/anything')).to be true
     end
 
-    # ssl options
-    [:ca_path, :ca_file, :verify_mode].each do |deprecated_method|
-      describe ".#{deprecated_method}" do
-        context "read" do
-          it "reads http_options[:ssl][:#{deprecated_method}] if http_options[:ssl]" do
-            value = "foo"
-            Koala::HTTPService.http_options[:ssl] = {deprecated_method => value}
-            expect(Koala::HTTPService.send(deprecated_method)).to eq(value)
-          end
-
-          it "returns nil if http_options[:ssl] is not defined" do
-            expect(Koala::HTTPService.send(deprecated_method)).to be_nil
-          end
-
-          it "generates a deprecation warning" do
-            expect(Koala::Utils).to receive(:deprecate)
-            Koala::HTTPService.send(deprecated_method)
-          end
-        end
-
-        context "write" do
-          it "defines http_options[:ssl] if not defined" do
-            Koala::HTTPService.http_options[:ssl] = nil
-            value = "foo"
-            Koala::HTTPService.send(:"#{deprecated_method}=", value)
-            expect(Koala::HTTPService.http_options[:ssl]).to be_a(Hash)
-          end
-
-          it "writes to http_options[:ssl][:#{deprecated_method}]" do
-            value = "foo"
-            Koala::HTTPService.send(:"#{deprecated_method}=", value)
-            expect(Koala::HTTPService.http_options[:ssl]).to be_a(Hash)
-            expect(Koala::HTTPService.http_options[:ssl][deprecated_method]).to eq(value)
-          end
-
-          it "does not redefine http_options[:ssl] if already defined" do
-            hash = {:a => 2}
-            Koala::HTTPService.http_options[:ssl] = hash
-            Koala::HTTPService.send(:"#{deprecated_method}=", 3)
-            expect(Koala::HTTPService.http_options[:ssl]).to include(hash)
-          end
-
-          it "generates a deprecation warning" do
-            expect(Koala::Utils).to receive(:deprecate)
-            Koala::HTTPService.send(:"#{deprecated_method}=", 2)
-          end
-        end
-      end
-    end
-
-    describe "per-request options" do
-      before :each do
-        # Setup stubs for make_request to execute without exceptions
-        @mock_body = double('Typhoeus response body')
-        @mock_headers_hash = double({:value => "headers hash"})
-        @mock_http_response = double("Faraday Response", :status => 200, :headers => @mock_headers_hash, :body => @mock_body)
-
-        @mock_connection = double("Faraday connection")
-        allow(@mock_connection).to receive(:get).and_return(@mock_http_response)
-        allow(@mock_connection).to receive(:post).and_return(@mock_http_response)
-        allow(Faraday).to receive(:new).and_return(@mock_connection)
-      end
-
-      describe ":typhoeus_options" do
-        it "merges any typhoeus_options into options" do
-          typhoeus_options = {:proxy => "http://user:password@example.org/" }
-          expect(Faraday).to receive(:new).with(anything, hash_including(typhoeus_options)).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :typhoeus_options => typhoeus_options)
-        end
-
-        it "deletes the typhoeus_options key" do
-          typhoeus_options = {:proxy => "http://user:password@example.org/" }
-          expect(Faraday).to receive(:new).with(anything, hash_not_including(:typhoeus_options => typhoeus_options)).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :typhoeus_options => typhoeus_options)
-        end
-      end
-
-      describe ":ca_path" do
-        it "sets any ca_path into options[:ssl]" do
-          ca_path = :foo
-          expect(Faraday).to receive(:new).with(anything, hash_including(:ssl => hash_including(:ca_path => ca_path))).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :ca_path => ca_path)
-        end
-
-        it "deletes the ca_path key" do
-          ca_path = :foo
-          expect(Faraday).to receive(:new).with(anything, hash_not_including(:ca_path => ca_path)).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :ca_path => ca_path)
-        end
-      end
-
-      describe ":ca_file" do
-        it "sets any ca_file into options[:ssl]" do
-          ca_file = :foo
-          expect(Faraday).to receive(:new).with(anything, hash_including(:ssl => hash_including(:ca_file => ca_file))).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :ca_file => ca_file)
-        end
-
-        it "deletes the ca_file key" do
-          ca_file = :foo
-          expect(Faraday).to receive(:new).with(anything, hash_not_including(:ca_file => ca_file)).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :ca_file => ca_file)
-        end
-      end
-
-      describe ":verify_mode" do
-        it "sets any verify_mode into options[:ssl]" do
-          verify_mode = :foo
-          expect(Faraday).to receive(:new).with(anything, hash_including(:ssl => hash_including(:verify_mode => verify_mode))).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :verify_mode => verify_mode)
-        end
-
-        it "deletes the verify_mode key" do
-          verify_mode = :foo
-          expect(Faraday).to receive(:new).with(anything, hash_not_including(:verify_mode => verify_mode)).and_return(@mock_connection)
-          Koala::HTTPService.make_request("anything", {}, "get", :verify_mode => verify_mode)
-        end
-      end
+    it "returns nil for paths without a version" do
+      expect(Koala::HTTPService.path_contains_api_version?('/anything')).to be false
     end
   end
 end

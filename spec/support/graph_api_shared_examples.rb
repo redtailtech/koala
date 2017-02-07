@@ -90,16 +90,36 @@ shared_examples_for "Koala GraphAPI" do
 
   describe "#get_picture" do
     it "can access a user's picture" do
-      expect(@api.get_picture(KoalaTest.user2)).to match(/http[s]*\:\/\//)
+      expect(@api.get_picture(KoalaTest.user2)).to match(/https?\:\/\//)
     end
 
     it "can access a user's picture, given a picture type"  do
-      expect(@api.get_picture(KoalaTest.user2, {:type => 'large'})).to match(/^http[s]*\:\/\//)
+      expect(@api.get_picture(KoalaTest.user2, {:type => 'large'})).to match(/^https?\:\/\//)
     end
 
     it "works even if Facebook returns nil" do
       allow(@api).to receive(:graph_call).and_return(nil)
       expect(@api.get_picture(KoalaTest.user2, {:type => 'large'})).to be_nil
+    end
+  end
+
+  describe "#get_picture_data" do
+    it "can access a user's picture data" do
+      result = @api.get_picture_data(KoalaTest.user2)
+      expect(result).to be_kind_of(Hash)
+      expect(result["data"]).to be_kind_of(Hash)
+      expect(result['data']).to be_truthy
+      expect(result['data'].keys).to include('is_silhouette', 'url')
+    end
+  end
+
+  describe "#get_user_picture_data" do
+    it "can access a user's picture data" do
+      result = @api.get_picture_data(KoalaTest.user2)
+      expect(result).to be_kind_of(Hash)
+      expect(result["data"]).to be_kind_of(Hash)
+      expect(result['data']).to be_truthy
+      expect(result['data'].keys).to include('is_silhouette', 'url')
     end
   end
 
@@ -168,7 +188,7 @@ shared_examples_for "Koala GraphAPI" do
     it "passes a queries argument" do
       queries = double('query string')
       queries_json = "some JSON"
-      allow(MultiJson).to receive(:dump).with(queries).and_return(queries_json)
+      allow(JSON).to receive(:dump).with(queries).and_return(queries_json)
 
       expect(@api).to receive(:get_object).with(anything, hash_including(:q => queries_json), anything)
       @api.fql_multiquery(queries)
@@ -214,6 +234,14 @@ shared_examples_for "Koala GraphAPI with an access token" do
     result = @api.get_objects([KoalaTest.page, KoalaTest.user1])
     expect(result.length).to eq(2)
   end
+
+  describe "#get_object_metadata" do
+    it "can access an object's metadata" do
+      result = @api.get_object_metadata(KoalaTest.user1)
+      expect(result["type"]).to eq("user")
+    end
+  end
+
   it "can access connections from users" do
     result = @api.get_connections(KoalaTest.user2, "friends")
     expect(result.length).to be > 0
@@ -365,6 +393,25 @@ shared_examples_for "Koala GraphAPI with an access token" do
     # note: Facebook doesn't post videos immediately to the wall, due to processing time
     # during which get_object(video_id) will return false
     # hence we can't do the same verify test we do for photos
+
+
+    describe "using a URL instead of a file" do
+      before :each do
+        @url = "http://techslides.com/demos/sample-videos/small.mp4"
+      end
+
+      it "can post photo to the user's wall using a URL" do
+        result = @api.put_video(@url)
+        @temporary_object_id = result["id"]
+        expect(@temporary_object_id).not_to be_nil
+      end
+
+      it "can post photo to the user's wall using a URL and an additional param" do
+        result = @api.put_video(@url, :description => "my message")
+        @temporary_object_id = result["id"]
+        expect(@temporary_object_id).not_to be_nil
+      end
+    end
   end
 
   it "can verify a message with an attachment posted to a feed" do
@@ -446,7 +493,7 @@ shared_examples_for "Koala GraphAPI with an access token" do
     end
 
     it "JSON-encodes the restrictions" do
-      expect(@app_api).to receive(:graph_call).with(anything, hash_including(:restrictions => MultiJson.dump(@restrictions)), anything, anything)
+      expect(@app_api).to receive(:graph_call).with(anything, hash_including(:restrictions => JSON.dump(@restrictions)), anything, anything)
       @app_api.set_app_restrictions(KoalaTest.app_id, @restrictions)
     end
 

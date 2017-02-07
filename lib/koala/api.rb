@@ -37,6 +37,10 @@ module Koala
       # @param options request-related options for Koala and Faraday.
       #                See https://github.com/arsduo/koala/wiki/HTTP-Services for additional options.
       # @option options [Symbol] :http_component which part of the response (headers, body, or status) to return
+      # @option options [Symbol] :format which request format to use. Currently, :json is supported
+      # @option options [Symbol] :preserve_form_arguments preserve arrays in arguments, which are
+      #                          expected by certain FB APIs (see the ads API in particular,
+      #                          https://developers.facebook.com/docs/marketing-api/adgroup/v2.4)
       # @option options [Boolean] :beta use Facebook's beta tier
       # @option options [Boolean] :use_ssl force SSL for this request, even if it's tokenless.
       #                                    (All API requests with access tokens use SSL.)
@@ -48,6 +52,10 @@ module Koala
       #
       # @return the body of the response from Facebook (unless another http_component is requested)
       def api(path, args = {}, verb = "get", options = {}, &error_checking_block)
+        # we make a copy of args so the modifications (added access_token & appsecret_proof)
+        # do not affect the received argument
+        args = args.dup
+
         # If a access token is explicitly provided, use that
         # This is explicitly needed in batch requests so GraphCollection
         # results preserve any specific access tokens provided
@@ -57,9 +65,9 @@ module Koala
         end
 
         # Translate any arrays in the params into comma-separated strings
-        args = sanitize_request_parameters(args)
+        args = sanitize_request_parameters(args) unless preserve_form_arguments?(options)
 
-        # add a leading /
+        # add a leading / if needed...
         path = "/#{path}" unless path =~ /^\//
 
         # make the request via the provided service
@@ -76,9 +84,10 @@ module Koala
           component == :response ? result : result.send(options[:http_component])
         else
           # parse the body as JSON and run it through the error checker (if provided)
-          # Note: Facebook sometimes sends results like "true" and "false", which aren't strictly objects
-          # and cause MultiJson.load to fail -- so we account for that by wrapping the result in []
-          MultiJson.load("[#{result.body.to_s}]")[0]
+          # Note: Facebook sometimes sends results like "true" and "false", which are valid[RFC7159]
+          # but unsupported by Ruby's stdlib[RFC4627] and cause JSON.load to fail -- so we account for
+          # that by wrapping the result in []
+          JSON.load("[#{result.body.to_s}]")[0]
         end
       end
 
@@ -101,10 +110,12 @@ module Koala
           result.merge(key => value)
         end
       end
+
+      def preserve_form_arguments?(options)
+        options[:format] == :json || options[:preserve_form_arguments] || Koala.config.preserve_form_arguments
+      end
     end
   end
 end
 
 require 'koala/api/graph_batch_api'
-# legacy support for old pre-1.2 API interfaces
-require 'koala/api/legacy'

@@ -72,18 +72,6 @@ describe "Koala::Facebook::TestUsers" do
       expect(Koala::Facebook::TestUsers.instance_methods.map(&:to_sym)).to include(:api)
       expect(Koala::Facebook::TestUsers.instance_methods.map(&:to_sym)).not_to include(:api=)
     end
-
-    # old graph_api accessor
-    it "returns the api object when graph_api is called" do
-      test_users = Koala::Facebook::TestUsers.new(:app_id => @app_id, :secret => @secret)
-      expect(test_users.graph_api).to eq(test_users.api)
-    end
-
-    it "fire a deprecation warning when graph_api is called" do
-      test_users = Koala::Facebook::TestUsers.new(:app_id => @app_id, :secret => @secret)
-      expect(Koala::Utils).to receive(:deprecate)
-      test_users.graph_api
-    end
   end
 
   describe "when used without network" do
@@ -105,12 +93,12 @@ describe "Koala::Facebook::TestUsers" do
       end
 
       it "accepts permissions as a string" do
-        expect(@test_users.graph_api).to receive(:graph_call).with(anything, hash_including("permissions" => "read_stream,publish_stream"), anything, anything)
+        expect(@test_users.api).to receive(:graph_call).with(anything, hash_including("permissions" => "read_stream,publish_stream"), anything, anything)
         result = @test_users.create(true, "read_stream,publish_stream")
       end
 
       it "accepts permissions as an array" do
-        expect(@test_users.graph_api).to receive(:graph_call).with(anything, hash_including("permissions" => "read_stream,publish_stream"), anything, anything)
+        expect(@test_users.api).to receive(:graph_call).with(anything, hash_including("permissions" => "read_stream,publish_stream"), anything, anything)
         result = @test_users.create(true, ["read_stream", "publish_stream"])
       end
 
@@ -123,13 +111,13 @@ describe "Koala::Facebook::TestUsers" do
 
       it "lets you specify other graph arguments, like uid and access token" do
         args = {:uid => "some test user ID", :owner_access_token => "some owner access token"}
-        expect(@test_users.graph_api).to receive(:graph_call).with(anything, hash_including(args), anything, anything)
+        expect(@test_users.api).to receive(:graph_call).with(anything, hash_including(args), anything, anything)
         @test_users.create(true, nil, args)
       end
 
       it "lets you specify http options that get passed through to the graph call" do
         options = {:some_http_option => true}
-        expect(@test_users.graph_api).to receive(:graph_call).with(anything, anything, anything, options)
+        expect(@test_users.api).to receive(:graph_call).with(anything, anything, anything, options)
         @test_users.create(true, nil, {}, options)
       end
     end
@@ -180,7 +168,7 @@ describe "Koala::Facebook::TestUsers" do
         options = {:some_http_option => true}
         # technically this goes through delete_object, but this makes it less brittle
         @stubbed = true
-        expect(@test_users.graph_api).to receive(:graph_call).with(anything, anything, anything, options)
+        expect(@test_users.api).to receive(:graph_call).with(anything, anything, anything, options)
         @test_users.delete("user", options)
       end
     end
@@ -227,20 +215,20 @@ describe "Koala::Facebook::TestUsers" do
 
       it "makes a POST with the test user Graph API " do
         @user1 = @test_users2.create(true)
-        expect(@test_users2.graph_api).to receive(:graph_call).with(anything, anything, "post", anything)
+        expect(@test_users2.api).to receive(:graph_call).with(anything, anything, "post", anything)
         @test_users2.update(@user1, @updates)
       end
 
       it "makes a request to the test user with the update params " do
         @user1 = @test_users2.create(true)
-        expect(@test_users2.graph_api).to receive(:graph_call).with(@user1["id"], @updates, anything, anything)
+        expect(@test_users2.api).to receive(:graph_call).with(@user1["id"], @updates, anything, anything)
         @test_users2.update(@user1, @updates)
       end
 
       it "accepts an options hash" do
         options = {:some_http_option => true}
         @stubbed = true
-        expect(@test_users2.graph_api).to receive(:graph_call).with(anything, anything, anything, options)
+        expect(@test_users2.api).to receive(:graph_call).with(anything, anything, anything, options)
         @test_users2.update("foo", @updates, options)
       end
 
@@ -273,10 +261,6 @@ describe "Koala::Facebook::TestUsers" do
         expect(result).to be_truthy
       end
 
-      it "does not accept user IDs anymore" do
-        expect { @test_users.befriend(@user1["id"], @user2["id"]) }.to raise_exception
-      end
-
       it "accepts http options passed to both calls" do
         options = {:some_http_option => true}
         # should come twice, once for each user
@@ -299,7 +283,7 @@ describe "Koala::Facebook::TestUsers" do
 
       if KoalaTest.mock_interface?
         id_counter = 999999900
-        allow(@test_users).to receive(:create).and_return do
+        allow(@test_users).to receive(:create) do
           id_counter += 1
           {"id" => id_counter, "access_token" => @token, "login_url" => "https://www.facebook.com/platform/test_account.."}
         end
@@ -328,7 +312,7 @@ describe "Koala::Facebook::TestUsers" do
       perms = ["read_stream", "offline_access"]
       installed = false
       count = 25
-      expect(@test_users).to receive(:create).exactly(count).times.with(installed, perms, anything)
+      expect(@test_users).to receive(:create).exactly(count).times.with(installed, perms, anything, anything)
       allow(@test_users).to receive(:befriend)
       @test_users.create_network(count, installed, perms)
     end
@@ -336,7 +320,7 @@ describe "Koala::Facebook::TestUsers" do
     it "accepts http options that are passed to both the create and befriend calls" do
       count = 25
       options = {:some_http_option => true}
-      expect(@test_users).to receive(:create).exactly(count).times.with(anything, anything, options).and_return({})
+      expect(@test_users).to receive(:create).exactly(count).times.with(anything, anything, anything, options).and_return({})
       # there are more befriends than creates, but we don't need to do the extra work to calculate out the exact #
       expect(@test_users).to receive(:befriend).at_least(count).times.with(anything, anything, options)
       @test_users.create_network(count, true, "", options)
